@@ -1,13 +1,12 @@
 node_modules/
+.npm-cache/
 dist/
 coverage/
+out/
+*.log
 .env
 .env.*
-!.env.example
-playwright-report/
-test-results/
-*.log
 *.txt
 *.xlsx
 .ssomcp/
-
+playwright/.auth/

@@ -1,0 +1,27 @@
+{
+  "name": "ssomcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline core for Thai SSO contribution filing preparation",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run build && npm test",
+    "prepare:sample": "npm run build && node dist/scripts/prepare-sample.js"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "iconv-lite": "^0.6.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
