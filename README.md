@@ -19,6 +19,10 @@ save, or submit a live filing.
 - One-attempt filing coordinator with duplicate-period guard
 - Fail-closed reconciliation against all five portal summary totals
 - Hard save-versus-submit boundary with per-run explicit confirmation
+- Atomic local employer registry with credential-field rejection
+- Totals-only JSONL filing history with no employee rows
+- Submitted-only baseline store encrypted with Windows DPAPI
+- Configurable baseline retention and previous-period lookup
 
 ## Run
 

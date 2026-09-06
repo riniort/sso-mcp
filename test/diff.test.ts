@@ -5,7 +5,7 @@ import type { Employee } from '../src/types.js';
 const employee = (ssoId: string, wage: number): Employee => ({
   ssoId,
   prefixCode: '001',
-  firstName: 'สมชาย',
+  firstName: 'ทดสอบ',
   lastName: 'ทดสอบ',
   wage,
 });

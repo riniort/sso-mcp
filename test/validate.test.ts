@@ -23,7 +23,7 @@ describe('Tier-1 validation', () => {
   it('detects duplicate ids', () => {
     const ctx = sampleContext();
     ctx.employees.push({ ...ctx.employees[0]! });
-    expect(validateTier1(computeRun(ctx))).toContain('duplicate ssoId=1101700000012');
+    expect(validateTier1(computeRun(ctx))).toContain('duplicate ssoId=0000000000000');
   });
 
   it('detects malformed record width', () => {

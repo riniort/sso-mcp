@@ -12,7 +12,7 @@ describe('generateTxt', () => {
     expect(records).toHaveLength(3);
     expect(records.every((record) => Buffer.byteLength(record, 'latin1') === 135)).toBe(true);
     expect(generated.buf.subarray(-2).toString('latin1')).toBe('\r\n');
-    expect(decodeTIS620(generated.buf)).toContain('บริษัท ทดสอบ จำกัด');
+    expect(decodeTIS620(generated.buf)).toContain('นิติบุคคลทดสอบ');
   });
 
   it('writes 5 percent as 0500 and converts dates to Buddhist Era only at formatting', () => {
@@ -25,7 +25,7 @@ describe('generateTxt', () => {
 
   it('warns when Thai text is truncated', () => {
     const result = buildLine(DETAIL_SPEC, {
-      ssoId: '1101700000012',
+      ssoId: '0000000000000',
       prefixCode: '001',
       firstName: 'ก'.repeat(31),
       lastName: 'ใจดี',
