@@ -25,7 +25,27 @@ export interface PortalSelectors {
     /** Container(s) that may hold a login error message to surface (no PII). */
     errorText: string[];
   };
-  /** UNVERIFIED — see file header. */
+  /**
+   * Previous-submission / contribution-info page used for the duplicate-period check.
+   * VERIFIED URL: an unauthenticated hit bounces to
+   * login.do?continue=...infoEmployeeContribute.do, so after login the session cookie
+   * loads it directly. The row/table selectors below are still UNVERIFIED — capture them
+   * from a real authenticated session (check_previous_submission dumps the DOM to help).
+   */
+  previousSubmissionUrl: string;
+  /** VERIFIED selectors for the previous-submission / duplicate-check page. */
+  history: {
+    form: string;
+    accountSelect: string;
+    branchSelect: string;
+    yearSelect: string;
+    searchButton: string;
+    /** Table whose header is งวดเงินสมทบ | วันที่ชำระเงิน | ... */
+    resultTable: string;
+    /** Presence means the session is authenticated (logout link). */
+    loggedInHint: string;
+  };
+  /** UNVERIFIED write flow — see file header. */
   contribution: {
     menuUrl?: string;
     fileInput?: string;
@@ -51,6 +71,18 @@ export const PORTAL: PortalSelectors = {
       '[id*="otp" i]',
     ],
     errorText: ['.alert-danger', '.error', '#errorMsg', '.login-error'],
+  },
+  previousSubmissionUrl: 'https://www.sso.go.th/eservices/esv/infoEmployeeContribute.do',
+  history: {
+    // Verified from a live session: form#mainForm (name ESV002) POSTs cmd=doSearch;
+    // the ค้นหา button runs `if(validateForm(this.form)) doCmd('doSearch')`.
+    form: '#mainForm',
+    accountSelect: 'select[name="selectedAccountNo"]',
+    branchSelect: 'select[name="selectedBranchNo"]',
+    yearSelect: 'select[name="year"]',
+    searchButton: 'input[type="button"][value="ค้นหา"]',
+    resultTable: 'table.form-data',
+    loggedInHint: 'a:has-text("ออกจากระบบ")',
   },
   contribution: {
     // menuUrl / fileInput / saveButton / submitButton / summaryTable:

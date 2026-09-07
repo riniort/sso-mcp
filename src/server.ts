@@ -18,6 +18,7 @@ import {
 } from './sso/actuator-factory.js';
 import { BrowserPortalActuator, credentialTargetFor, SsoPortalError } from './sso/browser-actuator.js';
 import { writeWindowsCredential, type CredentialWriteResult } from './auth/windows-credential.js';
+import type { SubmissionRecord } from './sso/submission-history.js';
 
 const periodSchema = z.object({
   month: z.number().int().min(1).max(12),
@@ -286,6 +287,60 @@ export function createSsoMcpServer(options: SsoMcpServerOptions = {}): McpServer
         return {
           isError: true,
           content: [{ type: 'text' as const, text: `Portal login check failed [${error.code}]: ${error.message}` }],
+        };
+      }
+      throw error;
+    } finally {
+      await actuator.close();
+    }
+  });
+
+  server.registerTool('check_previous_submission', {
+    title: 'Check previous SSO submissions',
+    description:
+      'Log in and read the filed-contributions history (รายการประวัติการส่งเงินสมทบ) for an ' +
+      'employer and year, to see which periods are already filed before preparing a new one. ' +
+      'Read-only: it queries and reads, never files.',
+    inputSchema: z.object({
+      employer: z.string().min(1).optional().describe('Cached nickname or accountNo:branch; defaults to active employer'),
+      year: z.number().int().min(2000).max(2100).optional().describe('Gregorian year (CE); defaults to the current year'),
+    }),
+    annotations: { readOnlyHint: true },
+  }, async ({ employer, year }) => {
+    if (!portalConfig.live) {
+      return disabledResult('Previous-submission check');
+    }
+    const selected = employer ? await employers.find(employer) : activeEmployer;
+    if (!selected) throw new Error('no employer selected; call change_active_employer first');
+    activeEmployer = selected;
+    const yearCE = year ?? new Date().getFullYear();
+
+    const actuator = buildActuator(portalConfig);
+    const reader = actuator as {
+      readSubmissionHistory?: (e: CachedEmployer, y: number) => Promise<SubmissionRecord[]>;
+    };
+    try {
+      await actuator.login(selected);
+      if (typeof reader.readSubmissionHistory !== 'function') {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: 'This portal actuator cannot read submission history.' }],
+        };
+      }
+      const records = await reader.readSubmissionHistory(selected, yearCE);
+      return textResult({
+        employer: { accountNo: selected.accountNo, branch: selected.branch, nickname: selected.nickname },
+        yearCE,
+        yearBE: yearCE + 543,
+        filedPeriods: records.map((record) => record.periodLabelBE),
+        records,
+        note: 'Read-only view of filed contributions. No filing action was taken.',
+      });
+    } catch (error) {
+      if (error instanceof SsoPortalError) {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `Previous-submission check failed [${error.code}]: ${error.message}` }],
         };
       }
       throw error;

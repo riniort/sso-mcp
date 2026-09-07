@@ -14,6 +14,8 @@ but stays fail-closed until its selectors are verified against a test-employer s
   `query_history` tools
 - Real Playwright login to SSO e-Service (`check_portal_login`) with verified login-form
   selectors, one login attempt, and a fail-closed stop on any captcha/OTP/error
+- `check_previous_submission` — read the filed-contributions history
+  (รายการประวัติการส่งเงินสมทบ) for an employer/year; verified selectors and duplicate-period lookup
 - `create_employer` — register a นายจ้าง and capture its SSO login in one native popup
 - Windows Credential Manager reader/writer so passwords never enter model context
 - Fail-closed attach/save/submit placeholders that never touch the portal until verified
@@ -123,7 +125,8 @@ and exact government sample-file behavior remain marked as confirmation items in
 The generator emits a warning when a provisional ceiling rule is used. Do not use its output
 for a live filing until those items have been checked against an official or accepted sample.
 
-The Playwright login adapter is implemented and its login-form selectors are verified against
-the live page. The contribution write flow — menu path, file input, save, duplicate lookup, and
-pre-submit summary — remains gated until those selectors are captured and verified with a test
-employer, so `upload_contribution`, `verify_summary`, and `submit_contribution` still fail closed.
+The Playwright login adapter and the read-only duplicate-check (previous-submission history) are
+implemented with selectors verified against the live authenticated pages. The contribution
+*write* flow — the ส่งเงินสมทบ menu path, file attach, save, and pre-submit summary — remains
+gated (`SSOMCP_ENABLE_WRITE_FLOW`) until those selectors are captured from the upload screens, so
+`upload_contribution`, `verify_summary`, and `submit_contribution` still fail closed.

@@ -11,6 +11,11 @@ import type {
 } from './actuator.js';
 import { classifyLoginResult, type LoginPageState } from './login-result.js';
 import { PORTAL, type PortalSelectors } from './portal-selectors.js';
+import {
+  findSubmittedPeriod,
+  parseHistoryRows,
+  type SubmissionRecord,
+} from './submission-history.js';
 import { readWindowsCredential, type LoginCredential } from '../auth/windows-credential.js';
 
 export class SsoPortalError extends Error {
@@ -226,11 +231,60 @@ export class BrowserPortalActuator implements SsoPortalActuator {
     }
   }
 
-  async findExistingFiling(_employer: EmployerRef, _period: Period): Promise<ExistingFiling | null> {
-    this.ensureWriteFlow('Duplicate-period check');
-    // Deep read of the ส่งเงินสมทบ history is part of the unverified flow; implement
-    // once portal-selectors.contribution is confirmed from a real session.
-    throw new SsoPortalError('WRITE_FLOW_UNVERIFIED', 'Duplicate-period check not yet implemented');
+  /**
+   * Read the รายการประวัติการส่งเงินสมทบ table on infoEmployeeContribute.do for one year.
+   * Read-only: it only queries and parses, never files. Selectors verified from a live session.
+   */
+  async readSubmissionHistory(employer: EmployerRef, yearCE: number): Promise<SubmissionRecord[]> {
+    if (!this.loggedIn || !this.page) {
+      throw new SsoPortalError('LOGIN_FAILED', 'Not logged in; call login() first');
+    }
+    const page = this.page;
+    const { history, login } = this.selectors;
+
+    await page.goto(this.selectors.previousSubmissionUrl, {
+      waitUntil: 'domcontentloaded',
+      timeout: this.loginTimeoutMs,
+    });
+
+    // A session that dropped bounces back to the login form; do not silently re-login.
+    const bounced = await page.locator(login.passwordField).first().isVisible().catch(() => false);
+    if (bounced) {
+      throw new SsoPortalError('LOGIN_FAILED', 'Session expired before reading submission history');
+    }
+
+    const yearBE = String(yearCE + 543);
+    await page.selectOption(history.accountSelect, employer.accountNo).catch(() => {});
+    await page.selectOption(history.branchSelect, employer.branch.padStart(6, '0')).catch(() => {});
+    await page.selectOption(history.yearSelect, yearBE);
+    await Promise.allSettled([
+      page.waitForLoadState('networkidle', { timeout: this.loginTimeoutMs }),
+      page.click(history.searchButton, { timeout: this.loginTimeoutMs }),
+    ]);
+
+    const rows = (await page.evaluate(`
+      (function () {
+        var tables = Array.prototype.slice.call(document.querySelectorAll('table'));
+        var target = tables.filter(function (t) {
+          return ((t.rows[0] && t.rows[0].innerText) || '').indexOf('งวดเงินสมทบ') >= 0;
+        })[0];
+        if (!target) return [];
+        return Array.prototype.slice.call(target.rows).map(function (r) {
+          return Array.prototype.slice.call(r.cells).map(function (c) {
+            return ((c.innerText || '')).trim();
+          });
+        });
+      })()
+    `)) as string[][];
+
+    return parseHistoryRows(rows);
+  }
+
+  async findExistingFiling(employer: EmployerRef, period: Period): Promise<ExistingFiling | null> {
+    const records = await this.readSubmissionHistory(employer, period.yearCE);
+    const hit = findSubmittedPeriod(records, period);
+    if (!hit) return null;
+    return { status: 'submitted', reference: hit.payDateBE };
   }
 
   async attachAndSave(_run: RunResult, _txt: Buffer): Promise<PortalSummary> {

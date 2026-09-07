@@ -71,6 +71,7 @@ describe('MCP server', () => {
     expect((await client.listTools()).tools.map(({ name }) => name).sort()).toEqual([
       'change_active_employer',
       'check_portal_login',
+      'check_previous_submission',
       'create_employer',
       'get_active_employer',
       'prepare_contribution',
@@ -188,6 +189,34 @@ describe('MCP server', () => {
     expect(result.isError).not.toBe(true);
     expect(jsonText(result)).toMatchObject({ authenticated: true });
     expect(calls).toEqual(['login', 'close']);
+  });
+
+  it('reads previous submissions for the selected year when live', async () => {
+    const fakeActuator = {
+      async login() {},
+      async findExistingFiling() { return null; },
+      async attachAndSave() { throw new Error('unused'); },
+      async submitSavedDraft() { throw new Error('unused'); },
+      async close() {},
+      async readSubmissionHistory() {
+        return [
+          {
+            month: 7, yearCE: 2026, periodLabelBE: '07/2569', payDateBE: '14/08/2569',
+            totalWage: 42796, ratePercent: 5, headcount: 5, contribution: 4280, surcharge: 0,
+          },
+        ];
+      },
+    };
+    const { root, client } = await setup({ live: true, createActuator: () => fakeActuator });
+    const ctx = sampleContext();
+    await new EmployerStore(root).upsert({ ...ctx.employer, cachedAt: '2026-09-07T00:00:00.000Z' });
+
+    const result = await client.callTool({
+      name: 'check_previous_submission',
+      arguments: { employer: 'demo', year: 2026 },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(jsonText(result)).toMatchObject({ yearBE: 2569, filedPeriods: ['07/2569'] });
   });
 
   it('keeps live filing tools registered but fail-closed', async () => {

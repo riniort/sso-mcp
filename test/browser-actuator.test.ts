@@ -44,9 +44,9 @@ describe('BrowserPortalActuator credential handling', () => {
 describe('BrowserPortalActuator write-flow gate', () => {
   const actuator = new BrowserPortalActuator({ credentialProvider: async () => null });
 
-  it('blocks the duplicate check until the write flow is verified', async () => {
+  it('requires a login before the (verified, read-only) duplicate check', async () => {
     await expect(actuator.findExistingFiling(employer, period)).rejects.toMatchObject({
-      code: 'WRITE_FLOW_UNVERIFIED',
+      code: 'LOGIN_FAILED',
     });
   });
 
