@@ -11,6 +11,13 @@ import type { DataProtector } from './store/protector.js';
 import { WindowsDpapiProtector } from './store/protector.js';
 import { defaultStoreRoot } from './store/root.js';
 import type { Employee, Period } from './types.js';
+import {
+  buildActuator,
+  resolvePortalConfig,
+  type PortalRuntimeConfig,
+} from './sso/actuator-factory.js';
+import { BrowserPortalActuator, credentialTargetFor, SsoPortalError } from './sso/browser-actuator.js';
+import { writeWindowsCredential, type CredentialWriteResult } from './auth/windows-credential.js';
 
 const periodSchema = z.object({
   month: z.number().int().min(1).max(12),
@@ -30,6 +37,10 @@ export interface SsoMcpServerOptions {
   outputRoot?: string;
   protector?: DataProtector;
   version?: string;
+  /** Live-portal runtime overrides; defaults come from environment (off by default). */
+  portal?: Partial<PortalRuntimeConfig>;
+  /** Override the credential-capture dialog (tests inject a fake; default is the native popup). */
+  credentialWriter?: (target: string, label: string) => Promise<CredentialWriteResult>;
 }
 
 const textResult = (value: unknown) => ({
@@ -62,6 +73,8 @@ export function createSsoMcpServer(options: SsoMcpServerOptions = {}): McpServer
     options.protector ?? new WindowsDpapiProtector(),
   );
   let activeEmployer: CachedEmployer | undefined;
+  const portalConfig = resolvePortalConfig(process.env, storeRoot, options.portal);
+  const credentialWriter = options.credentialWriter ?? writeWindowsCredential;
 
   const server = new McpServer({ name: 'ssomcp', version: options.version ?? '0.1.0' });
 
@@ -112,6 +125,54 @@ export function createSsoMcpServer(options: SsoMcpServerOptions = {}): McpServer
     if (!match) throw new Error(`employer not found in ${join(storeRoot, 'employers.json')}`);
     activeEmployer = match;
     return textResult({ activeEmployer: match });
+  });
+
+  server.registerTool('create_employer', {
+    title: 'Create employer profile',
+    description:
+      'Register a นายจ้าง in the local employer cache and, in the same step, capture its SSO ' +
+      'e-Service login into Windows Credential Manager (one login per employer, keyed by ' +
+      'accountNo). The password is typed into a native OS dialog, never into chat. Set ' +
+      'captureCredential=false to add the profile without a login for now.',
+    inputSchema: z.object({
+      nickname: z.string().min(1).describe('Short name used to switch employers, e.g. "ลูกค้า A"'),
+      accountNo: z.string().regex(/^\d{10}$/u).describe('เลขที่บัญชีนายจ้าง (10 digits)'),
+      branch: z.string().regex(/^\d{1,6}$/u).optional().describe('ลำดับที่สาขา; defaults to "0"'),
+      name: z.string().min(1).describe('ชื่อสถานประกอบการ'),
+      province: z.string().min(1).describe('Canonical province (links to the minimum-wage tier)'),
+      captureCredential: z.boolean().optional().describe('Prompt for the SSO login now (default true)'),
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false },
+  }, async ({ nickname, accountNo, branch, name, province, captureCredential }) => {
+    const employer: CachedEmployer = {
+      nickname,
+      accountNo,
+      branch: branch ?? '0',
+      name,
+      province,
+      cachedAt: new Date().toISOString(),
+    };
+    await employers.upsert(employer);
+    activeEmployer = employer;
+
+    let credential: CredentialWriteResult | 'skipped' | 'already-set' = 'skipped';
+    if (captureCredential !== false) {
+      const target = credentialTargetFor(portalConfig.credentialTargetPrefix, employer);
+      credential = await credentialWriter(target, `${name} (${accountNo})`);
+    }
+
+    return textResult({
+      employer,
+      credential,
+      next:
+        credential === 'written'
+          ? 'Login saved. Use check_portal_login to verify the session (needs SSOMCP_LIVE=1).'
+          : credential === 'cancelled'
+            ? 'Profile saved without a login; add it later via check_portal_login when prompted.'
+            : credential === 'unavailable'
+              ? 'Profile saved. Credential capture needs Windows; add the login manually to Credential Manager.'
+              : 'Profile saved.',
+    });
   });
 
   server.registerTool('prepare_contribution', {
@@ -187,6 +248,50 @@ export function createSsoMcpServer(options: SsoMcpServerOptions = {}): McpServer
       entries,
       caveat: 'Local history records what ssomcp did; confirm live filing state on e-Service.',
     });
+  });
+
+  server.registerTool('check_portal_login', {
+    title: 'Check SSO e-Service login',
+    description:
+      'Log in to SSO e-Service for the selected employer and confirm the session reached the ' +
+      'authenticated web app. Read-only: it never files, attaches, or submits. One login attempt; ' +
+      'stops on any captcha/OTP. Credentials come from Windows Credential Manager, never chat.',
+    inputSchema: z.object({
+      employer: z.string().min(1).optional().describe('Cached nickname or accountNo:branch; defaults to active employer'),
+    }),
+    annotations: { readOnlyHint: true },
+  }, async ({ employer }) => {
+    if (!portalConfig.live) {
+      return disabledResult('Portal login check');
+    }
+    const selected = employer ? await employers.find(employer) : activeEmployer;
+    if (!selected) throw new Error('no employer selected; call change_active_employer first');
+    activeEmployer = selected;
+
+    const actuator = buildActuator(portalConfig);
+    try {
+      await actuator.login(selected);
+      const landed =
+        actuator instanceof BrowserPortalActuator
+          ? { url: actuator.landedUrl, title: actuator.landedTitle }
+          : {};
+      return textResult({
+        authenticated: true,
+        employer: { accountNo: selected.accountNo, branch: selected.branch, nickname: selected.nickname },
+        landed,
+        note: 'Login and in-app navigation verified. No filing action was taken.',
+      });
+    } catch (error) {
+      if (error instanceof SsoPortalError) {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `Portal login check failed [${error.code}]: ${error.message}` }],
+        };
+      }
+      throw error;
+    } finally {
+      await actuator.close();
+    }
   });
 
   server.registerTool('refresh_employers', {

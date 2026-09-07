@@ -2,8 +2,9 @@
 
 An offline-first MCP server for preparing Thailand SSO monthly contribution filings (สปส.1-10).
 It exposes MCP prompts and tools over stdio, backed by private local employer, history, and
-encrypted employee-baseline stores. It does not yet contain a verified Playwright adapter, so
-live refresh, upload, verification, and submission are registered but deliberately fail closed.
+encrypted employee-baseline stores. A real Playwright adapter now logs in to SSO e-Service and
+lands inside the authenticated web app; the deeper attach/save/submit write flow is registered
+but stays fail-closed until its selectors are verified against a test-employer session.
 
 ## Implemented
 
@@ -11,7 +12,11 @@ live refresh, upload, verification, and submission are registered but deliberate
 - `/ssomcp`, `/ssomcp-change`, and `/ssomcp-refresh` prompts
 - Offline `get_active_employer`, `change_active_employer`, `prepare_contribution`, and
   `query_history` tools
-- Fail-closed live filing tool placeholders that never touch the browser or credentials
+- Real Playwright login to SSO e-Service (`check_portal_login`) with verified login-form
+  selectors, one login attempt, and a fail-closed stop on any captcha/OTP/error
+- `create_employer` — register a นายจ้าง and capture its SSO login in one native popup
+- Windows Credential Manager reader/writer so passwords never enter model context
+- Fail-closed attach/save/submit placeholders that never touch the portal until verified
 - Contribution calculation selected by Gregorian filing period
 - Floor/ceiling clamping and satang rounding
 - Tier-1 consistency and duplicate-ID validation
@@ -75,6 +80,42 @@ The employer refresh tool will populate `employers.json` once the portal adapter
 Until then, tests or trusted local setup code can populate it through `EmployerStore`; credentials
 must never be placed in that file.
 
+## Live portal use
+
+Live browser access is **off by default** — a normal install opens no browser and reads no
+credential. Enable it with environment variables:
+
+- `SSOMCP_LIVE=1` — allow the real Playwright login/session (`check_portal_login`).
+- `SSOMCP_ENABLE_WRITE_FLOW=1` — additionally allow the attach/save/submit flow. This stays
+  non-functional until the `contribution` selectors in `src/sso/portal-selectors.ts` are
+  confirmed from an authenticated test-employer session; until then it fails closed.
+- `SSOMCP_HEADFUL=1` — show the browser window (default headless).
+- `SSOMCP_CRED_PREFIX` — Windows Credential Manager target prefix (default `ssomcp`).
+
+Live use also requires the Playwright browser binary:
+
+```bash
+npx playwright install chromium
+```
+
+Each SSO e-Service **นายจ้าง has its own login** (unlike FlowAccount, where one login reaches
+many companies — so there is no company-picker after login here). Credentials live only in
+**Windows Credential Manager**, one Generic Credential per employer account, keyed
+`ssomcp:<accountNo>` (e.g. `ssomcp:1234567890`). The login is issued per เลขที่บัญชีนายจ้าง and
+covers all of that employer's branches, so branches share one credential. Managing N client
+employers means N separate logins, one per accountNo.
+
+The easiest way to populate one is `create_employer`: it registers the นายจ้าง and, in the same
+step, opens a native OS popup to capture that employer's SSO login and writes it to Credential
+Manager (`CredWrite`) under the right target automatically. Pass `captureCredential: false` to add
+the profile without a login for now. The password is entered in the OS dialog and written by a
+child process — it never enters chat or model context.
+
+The username is the SSO e-Service login; the password is read by a child process and typed into
+the browser — it never enters chat or model context. There is exactly **one** login attempt per
+run; any captcha, OTP, or unexpected screen stops and hands off to a human, never a retry loop
+(a wrong-password retry on the government portal can lock the employer's account).
+
 ## Important confirmation gates
 
 The 2026+ contribution wage floor, official rounding rule, field padding, prefix-code list,
@@ -82,5 +123,7 @@ and exact government sample-file behavior remain marked as confirmation items in
 The generator emits a warning when a provisional ceiling rule is used. Do not use its output
 for a live filing until those items have been checked against an official or accepted sample.
 
-The live Playwright adapter remains intentionally absent until the current portal flow,
-selectors, duplicate lookup, and pre-submit summary are verified with a test employer.
+The Playwright login adapter is implemented and its login-form selectors are verified against
+the live page. The contribution write flow — menu path, file input, save, duplicate lookup, and
+pre-submit summary — remains gated until those selectors are captured and verified with a test
+employer, so `upload_contribution`, `verify_summary`, and `submit_contribution` still fail closed.

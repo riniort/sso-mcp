@@ -8,6 +8,7 @@ import { createSsoMcpServer } from '../src/server.js';
 import { BaselineStore } from '../src/store/baseline.js';
 import { EmployerStore } from '../src/store/employers.js';
 import type { DataProtector } from '../src/store/protector.js';
+import type { SsoPortalActuator } from '../src/sso/actuator.js';
 import { sampleContext } from './fixtures.js';
 
 class TestProtector implements DataProtector {
@@ -23,11 +24,22 @@ class TestProtector implements DataProtector {
 const roots: string[] = [];
 const closers: Array<() => Promise<void>> = [];
 
-async function setup() {
+type ServerOptions = NonNullable<Parameters<typeof createSsoMcpServer>[0]>;
+
+async function setup(
+  portal?: ServerOptions['portal'],
+  credentialWriter?: ServerOptions['credentialWriter'],
+) {
   const root = await mkdtemp(join(tmpdir(), 'ssomcp-server-test-'));
   roots.push(root);
   const protector = new TestProtector();
-  const server = createSsoMcpServer({ storeRoot: root, outputRoot: join(root, 'output'), protector });
+  const server = createSsoMcpServer({
+    storeRoot: root,
+    outputRoot: join(root, 'output'),
+    protector,
+    ...(portal ? { portal } : {}),
+    ...(credentialWriter ? { credentialWriter } : {}),
+  });
   const client = new Client({ name: 'ssomcp-test', version: '1.0.0' });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
@@ -58,6 +70,8 @@ describe('MCP server', () => {
     ]);
     expect((await client.listTools()).tools.map(({ name }) => name).sort()).toEqual([
       'change_active_employer',
+      'check_portal_login',
+      'create_employer',
       'get_active_employer',
       'prepare_contribution',
       'query_history',
@@ -97,6 +111,83 @@ describe('MCP server', () => {
     const files = value.files as { txtPath: string; xlsxPath: string };
     expect((await readFile(files.txtPath)).length).toBe(3 * 137);
     expect((await readFile(files.xlsxPath)).subarray(0, 2).toString('ascii')).toBe('PK');
+  });
+
+  it('creates an employer profile and triggers credential capture for that นายจ้าง', async () => {
+    const writes: Array<{ target: string; label: string }> = [];
+    const { root, client } = await setup(undefined, async (target, label) => {
+      writes.push({ target, label });
+      return 'written';
+    });
+
+    const result = await client.callTool({
+      name: 'create_employer',
+      arguments: {
+        nickname: 'ลูกค้า A',
+        accountNo: '1234567890',
+        name: 'บริษัท เอ จำกัด',
+        province: 'กรุงเทพมหานคร',
+      },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(jsonText(result)).toMatchObject({
+      employer: { accountNo: '1234567890', branch: '0', nickname: 'ลูกค้า A' },
+      credential: 'written',
+    });
+    // One credential per employer, keyed by accountNo only.
+    expect(writes).toEqual([{ target: 'ssomcp:1234567890', label: 'บริษัท เอ จำกัด (1234567890)' }]);
+
+    const persisted = await new EmployerStore(root).find('ลูกค้า A');
+    expect(persisted).toMatchObject({ accountNo: '1234567890', province: 'กรุงเทพมหานคร' });
+  });
+
+  it('creates an employer profile without a login when asked', async () => {
+    let called = false;
+    const { client } = await setup(undefined, async () => {
+      called = true;
+      return 'written';
+    });
+    const result = await client.callTool({
+      name: 'create_employer',
+      arguments: {
+        nickname: 'ลูกค้า B',
+        accountNo: '9876543210',
+        name: 'บริษัท บี จำกัด',
+        province: 'นนทบุรี',
+        captureCredential: false,
+      },
+    });
+    expect(jsonText(result)).toMatchObject({ credential: 'skipped' });
+    expect(called).toBe(false);
+  });
+
+  it('keeps the portal login check disabled unless live', async () => {
+    const { client } = await setup();
+    const result = await client.callTool({ name: 'check_portal_login', arguments: {} });
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toMatch(/disabled/i);
+  });
+
+  it('runs the portal login check against a live actuator when configured', async () => {
+    const calls: string[] = [];
+    const fakeActuator: SsoPortalActuator = {
+      async login() { calls.push('login'); },
+      async findExistingFiling() { return null; },
+      async attachAndSave() { throw new Error('unused'); },
+      async submitSavedDraft() { throw new Error('unused'); },
+      async close() { calls.push('close'); },
+    };
+    const { root, client } = await setup({ live: true, createActuator: () => fakeActuator });
+    const ctx = sampleContext();
+    await new EmployerStore(root).upsert({ ...ctx.employer, cachedAt: '2026-09-07T00:00:00.000Z' });
+
+    const result = await client.callTool({
+      name: 'check_portal_login',
+      arguments: { employer: 'demo' },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(jsonText(result)).toMatchObject({ authenticated: true });
+    expect(calls).toEqual(['login', 'close']);
   });
 
   it('keeps live filing tools registered but fail-closed', async () => {
