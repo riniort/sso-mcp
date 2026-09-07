@@ -1,18 +1,10 @@
-export * from './calc.js';
-export * from './config/ceilings.js';
-export * from './config/field-spec.js';
-export * from './config/prefix-codes.js';
-export * from './diff.js';
-export * from './prepare.js';
-export * from './sso/actuator.js';
-export * from './sso/filing-coordinator.js';
-export * from './sso/reconcile.js';
-export * from './store/baseline.js';
-export * from './store/employers.js';
-export * from './store/history.js';
-export * from './store/protector.js';
-export * from './store/root.js';
-export * from './txt-generator.js';
-export * from './types.js';
-export * from './validate.js';
-export * from './xlsx-summary.js';
+#!/usr/bin/env node
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import { createSsoMcpServer } from './server.js';
+
+try {
+  await serveStdio(() => createSsoMcpServer(), { legacy: 'serve' });
+} catch (error) {
+  console.error('ssomcp server failed:', error);
+  process.exitCode = 1;
+}

@@ -1,12 +1,17 @@
 # ssomcp
 
-Offline-first tooling for preparing Thailand SSO monthly contribution filings (สปส.1-10).
-This repository contains the **P0 offline core** plus the testable **P1/P2 safety contract**.
-It does not yet contain a configured Playwright adapter, so it cannot log in to SSO e-Service,
-save, or submit a live filing.
+An offline-first MCP server for preparing Thailand SSO monthly contribution filings (สปส.1-10).
+It exposes MCP prompts and tools over stdio, backed by private local employer, history, and
+encrypted employee-baseline stores. It does not yet contain a verified Playwright adapter, so
+live refresh, upload, verification, and submission are registered but deliberately fail closed.
 
 ## Implemented
 
+- MCP TypeScript SDK v2 stdio server with legacy protocol fallback
+- `/ssomcp`, `/ssomcp-change`, and `/ssomcp-refresh` prompts
+- Offline `get_active_employer`, `change_active_employer`, `prepare_contribution`, and
+  `query_history` tools
+- Fail-closed live filing tool placeholders that never touch the browser or credentials
 - Contribution calculation selected by Gregorian filing period
 - Floor/ceiling clamping and satang rounding
 - Tier-1 consistency and duplicate-ID validation
@@ -29,11 +34,46 @@ save, or submit a live filing.
 ```bash
 npm install
 npm run check
+npm start
+```
+
+Node.js 20 or newer is required. After `npm run build`, configure an MCP host to run the
+compiled stdio entry. For example:
+
+```json
+{
+  "mcpServers": {
+    "ssomcp": {
+      "command": "node",
+      "args": ["C:\\path\\to\\sso-mcp\\dist\\src\\index.js"]
+    }
+  }
+}
+```
+
+For an offline sample without an MCP host:
+
+```bash
 npm run prepare:sample
 ```
 
 The sample command writes `out/sso110-sample.txt` and
 `out/sso110-review-sample.xlsx`.
+
+## Storage workflow
+
+Runtime state lives outside the repository under `~/.ssomcp/`:
+
+- `employers.json` maps nicknames to employer account and branch records.
+- `baseline/*.json.dpapi` contains submitted-only employee baselines encrypted with Windows
+  DPAPI. `prepare_contribution` loads the latest baseline before the requested period unless
+  `previousEmployees` is supplied explicitly.
+- `history.jsonl` contains totals and statuses only; `query_history` never returns employee rows.
+- `output/<account>-<branch>/<YYYY-MM>/` receives atomically written TXT and review XLSX files.
+
+The employer refresh tool will populate `employers.json` once the portal adapter is implemented.
+Until then, tests or trusted local setup code can populate it through `EmployerStore`; credentials
+must never be placed in that file.
 
 ## Important confirmation gates
 

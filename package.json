@@ -2,23 +2,30 @@
   "name": "ssomcp",
   "version": "0.1.0",
   "private": true,
-  "description": "Offline core for Thai SSO contribution filing preparation",
+  "description": "Offline-first MCP server for Thai SSO contribution filing preparation",
   "type": "module",
+  "bin": {
+    "ssomcp": "dist/src/index.js"
+  },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run build && npm test",
     "prepare:sample": "npm run build && node dist/scripts/prepare-sample.js"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
     "exceljs": "^4.4.0",
-    "iconv-lite": "^0.6.3"
+    "iconv-lite": "^0.6.3",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
     "@types/node": "^24.3.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
