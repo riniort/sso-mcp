@@ -45,13 +45,34 @@ export interface PortalSelectors {
     /** Presence means the session is authenticated (logout link). */
     loggedInHint: string;
   };
-  /** UNVERIFIED write flow — see file header. */
+  /**
+   * ส่งเงินสมทบ (สปส.1-10 แยกยื่น) wizard. Steps 0–2 are VERIFIED from a live session;
+   * the upload (step 3) and summary (step 4) selectors are still to be captured — advancing
+   * that far drives a real filing on a live account, so it needs a test employer. The wizard is:
+   *   0 selectTxnType → 1 method → 2 period → 3 upload/บันทึก → 4 สรุป → 5 สำเร็จ
+   */
   contribution: {
-    menuUrl?: string;
+    /** Step 0: choose แยกยื่น (สปส.1-10) vs รวมสาขา (สปส.1-10/1). form ESV008. */
+    selectTxnTypeUrl: string;
+    txnTypeRadio: string;
+    txnTypeSingleValue: string; // "1-10" = แยกยื่น
+    txnTypeConfirm: string; // input running doCmd('doStep0txnType')
+    /** Steps 1–4 live on txn1d10.do (form ESV009). */
+    filingUrl: string;
+    /** Step 1: input method — 0 กรอกข้อมูล, 1 แนบไฟล์ (upload), 99 reuse previous. */
+    methodRadio: string;
+    methodFileValue: string; // "1"
+    branchRadio: string;
+    step1Continue: string; // input running doSelectMethod()
+    /** Step 2: period. Month value = MM; year value = Gregorian (e.g. 2026). */
+    periodMonthSelect: string;
+    periodYearSelect: string;
+    step2Continue: string; // input running confirmDiffRate()
+    /** Step 3 upload + step 4 summary: capture from a test-employer session. */
     fileInput?: string;
     saveButton?: string;
-    submitButton?: string;
     summaryTable?: string;
+    submitButton?: string;
   };
 }
 
@@ -85,7 +106,18 @@ export const PORTAL: PortalSelectors = {
     loggedInHint: 'a:has-text("ออกจากระบบ")',
   },
   contribution: {
-    // menuUrl / fileInput / saveButton / submitButton / summaryTable:
-    // capture from a real authenticated test-employer session before enabling.
+    selectTxnTypeUrl: 'https://www.sso.go.th/eservices/esv/txn1d10selectTxnType.do',
+    txnTypeRadio: 'input[name="selectedTxnType"]',
+    txnTypeSingleValue: '1-10',
+    txnTypeConfirm: 'input[type="button"][value="ตกลง"]',
+    filingUrl: 'https://www.sso.go.th/eservices/esv/txn1d10.do',
+    methodRadio: 'input[name="methodFlag"]',
+    methodFileValue: '1',
+    branchRadio: 'input[name="selectedBranchNo"]',
+    step1Continue: 'input[type="button"][value="ดำเนินการต่อ"]',
+    periodMonthSelect: 'select[name="formData.paidPeriodMonth"]',
+    periodYearSelect: 'select[name="formData.paidPeriodYear"]',
+    step2Continue: 'input[type="button"][value="ดำเนินการต่อ"]',
+    // fileInput / saveButton / summaryTable / submitButton: capture from a test employer.
   },
 };
