@@ -166,6 +166,24 @@ correct them without touching code. Defaults below are the P0 starting guess.
 | คำนำหน้า codes | seed table | `prefix-codes.ts` | สปส. spec |
 | e-Service login | plain user/password | `actuator.ts` | live check |
 
+### Confirmed against a real accepted file (งวด 04/2565, SSOSENT 6504.txt)
+
+Verified by decoding a genuine government-accepted upload file (kept out of the repo — real PII):
+
+- **135-byte fixed-width records, CRLF, TIS-620** — CONFIRMED.
+- **Text fields left-aligned, space-padded; numeric fields right-aligned, zero-padded** — CONFIRMED.
+- **Money = satang (×100, no decimal point)** — CONFIRMED (uniform for wage and contribution;
+  e.g. wage `00000000761300` = 7,613.00, contribution `000000075000` = 750.00 at the 15,000 ceiling).
+- **Rate field `0500` = 5.00%; headcount right-aligned zero-padded** — CONFIRMED.
+- **2-digit พ.ศ. year** — CONFIRMED (`0465` = period MMYY 04/2565; payDate DDMMYY `050565`).
+- **Field layout matches `field-spec.ts` exactly** — header: account10 · branch6 · payDate6 ·
+  period4 · name45 · rate4 · headcount6 · totalWage15 · totalContribution14 · employee12 ·
+  employer12. Detail: ssoId13 · prefix3 · firstName30 · lastName35 · wage14 · contribution12 ·
+  filler27. Header totals reconcile with the detail sums.
+- **⚠️ Rounding — NOT yet matching code.** The file rounds เงินสมทบ to **whole baht, half-up**:
+  wage 7,613.00 → 5% = 380.65 → stored **381.00**. `calc.ts` currently rounds to satang (380.65).
+  Confirm the official rule, then align `roundSatang` (see open question #4).
+
 ---
 
 ## 8. Local data (separated layers)
