@@ -197,10 +197,14 @@ export function createSsoMcpServer(options: SsoMcpServerOptions = {}): McpServer
       : undefined;
     const previous = previousEmployees ?? storedBaseline?.employees ?? [];
     const employeesForRun = currentEmployees as Employee[];
+    // Build a LOCAL date from the Y-M-D parts: the TXT date formatter reads local
+    // date components, so a UTC-constructed date would shift the pay date by a day
+    // in timezones behind UTC.
+    const [payYear, payMonth, payDay] = payDate.split('-').map(Number) as [number, number, number];
     const ctx = {
       employer: selected,
       period,
-      payDate: new Date(`${payDate}T00:00:00.000Z`),
+      payDate: new Date(payYear, payMonth - 1, payDay),
       employees: employeesForRun,
     };
     const run = computeRun(ctx);

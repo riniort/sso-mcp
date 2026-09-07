@@ -168,10 +168,10 @@ export class BrowserPortalActuator implements SsoPortalActuator {
       await page.fill(login.usernameField, credential.username);
       await page.fill(login.passwordField, credential.password);
       // Exactly one attempt (PROJECT.md §6). No retry loop anywhere.
-      await Promise.allSettled([
-        page.waitForLoadState('networkidle', { timeout: this.loginTimeoutMs }),
-        page.click(login.submitButton, { timeout: this.loginTimeoutMs }),
-      ]);
+      // Click first so the form POST navigation is in flight, THEN wait for it to settle —
+      // waiting concurrently can resolve on the already-idle login page before submit.
+      await page.click(login.submitButton, { timeout: this.loginTimeoutMs });
+      await page.waitForLoadState('networkidle', { timeout: this.loginTimeoutMs }).catch(() => {});
     }
 
     const state = await this.readLoginState();
@@ -257,10 +257,9 @@ export class BrowserPortalActuator implements SsoPortalActuator {
     await page.selectOption(history.accountSelect, employer.accountNo).catch(() => {});
     await page.selectOption(history.branchSelect, employer.branch.padStart(6, '0')).catch(() => {});
     await page.selectOption(history.yearSelect, yearBE);
-    await Promise.allSettled([
-      page.waitForLoadState('networkidle', { timeout: this.loginTimeoutMs }),
-      page.click(history.searchButton, { timeout: this.loginTimeoutMs }),
-    ]);
+    // Click first, then wait for the search POST to settle (see the login note above).
+    await page.click(history.searchButton, { timeout: this.loginTimeoutMs });
+    await page.waitForLoadState('networkidle', { timeout: this.loginTimeoutMs }).catch(() => {});
 
     const rows = (await page.evaluate(`
       (function () {
