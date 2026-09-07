@@ -61,7 +61,7 @@ describe('HistoryStore', () => {
     }));
     const entries = await store.findForPeriod('0000000000', '0', { month: 8, yearCE: 2026 });
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ headcount: 2, grandTotal: 1_915, status: 'submitted' });
+    expect(entries[0]).toMatchObject({ headcount: 2, grandTotal: 1_916, status: 'submitted' });
     expect(await readFile(join(root, 'history.jsonl'), 'utf8')).not.toContain('0000000000000');
   });
 });

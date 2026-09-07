@@ -162,7 +162,7 @@ correct them without touching code. Defaults below are the P0 starting guess.
 | Year in date fields | พ.ศ. 2-digit (2569 → `69`); internal dates stay Gregorian (§7→§12 boundary) | `field-spec.ts` | sample file |
 | Line ending | CRLF | `field-spec.ts` | sample file |
 | Encoding | TIS-620 / Windows-874 | `field-spec.ts` | sample file |
-| Rounding (สตางค์) | round half up to 2 dp, then ×100 | `calc.ts` | สปส. rule |
+| Rounding | CONFIRMED: whole baht, half-up (เศษ ≥ 50 สต. ปัดขึ้น, < 50 ปัดทิ้ง) | `calc.ts` | สปส. rule + sample |
 | คำนำหน้า codes | seed table | `prefix-codes.ts` | สปส. spec |
 | e-Service login | plain user/password | `actuator.ts` | live check |
 
@@ -180,9 +180,13 @@ Verified by decoding a genuine government-accepted upload file (kept out of the 
   period4 · name45 · rate4 · headcount6 · totalWage15 · totalContribution14 · employee12 ·
   employer12. Detail: ssoId13 · prefix3 · firstName30 · lastName35 · wage14 · contribution12 ·
   filler27. Header totals reconcile with the detail sums.
-- **⚠️ Rounding — NOT yet matching code.** The file rounds เงินสมทบ to **whole baht, half-up**:
-  wage 7,613.00 → 5% = 380.65 → stored **381.00**. `calc.ts` currently rounds to satang (380.65).
-  Confirm the official rule, then align `roundSatang` (see open question #4).
+- **Rounding — CONFIRMED and fixed.** The file rounds เงินสมทบ to **whole baht, half-up**
+  (wage 7,613.00 → 5% = 380.65 → stored **381.00**). This matches the สปส. rule (เศษตั้งแต่ 50
+  สตางค์ปัดขึ้นเป็น 1 บาท, ต่ำกว่า 50 สตางค์ปัดทิ้ง). `calc.ts` now uses `roundContributionBaht`
+  (was satang rounding). Resolves open question #4.
+- **Open — wage field over ceiling.** The sample has no earner above the 15,000 ceiling, so whether
+  the detail เงินค่าจ้าง field carries the *actual* wage or the *capped* base is still unconfirmed;
+  the generator currently writes the actual wage. Confirm with an over-ceiling sample.
 
 ---
 

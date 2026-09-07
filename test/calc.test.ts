@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { computeRun, roundSatang } from '../src/calc.js';
+import { computeRun, roundContributionBaht } from '../src/calc.js';
 import { sampleContext } from './fixtures.js';
 
 describe('computeRun', () => {
   it('clamps below floor and above ceiling', () => {
     const run = computeRun(sampleContext());
-    expect(run.lines[0]).toMatchObject({ baseWage: 1_650, employeeShare: 82.5, employerShare: 82.5 });
+    // 1,650 × 5% = 82.50 → rounds up to 83 (whole-baht สปส. rule).
+    expect(run.lines[0]).toMatchObject({ baseWage: 1_650, employeeShare: 83, employerShare: 83 });
     expect(run.lines[1]).toMatchObject({ baseWage: 17_500, employeeShare: 875, employerShare: 875 });
     expect(run.totals).toEqual({
       headcount: 2,
       totalWage: 21_000,
-      employeeTotal: 957.5,
-      employerTotal: 957.5,
-      grandTotal: 1_915,
+      employeeTotal: 958,
+      employerTotal: 958,
+      grandTotal: 1_916,
     });
   });
 
@@ -23,8 +24,11 @@ describe('computeRun', () => {
     expect(run.lines[1]?.employeeShare).toBe(750);
   });
 
-  it('rounds to satang', () => {
-    expect(roundSatang(10.005)).toBe(10.01);
-    expect(roundSatang(10.994)).toBe(10.99);
+  it('rounds each contribution to whole baht, half up (สปส. rule)', () => {
+    expect(roundContributionBaht(82.5)).toBe(83); // exactly .50 rounds up
+    expect(roundContributionBaht(380.65)).toBe(381); // matches SSOSENT 6504 sample
+    expect(roundContributionBaht(500.45)).toBe(500); // < .50 rounds down
+    expect(roundContributionBaht(500.5)).toBe(501);
+    expect(roundContributionBaht(750)).toBe(750);
   });
 });

@@ -108,7 +108,7 @@ describe('MCP server', () => {
     const value = jsonText(result);
     expect(value.baseline).toMatchObject({ source: 'encrypted-store', period: { month: 7, yearCE: 2026 } });
     expect(value.diff).toEqual({ added: 1, removed: 0, changed: 0 });
-    expect(value.totals).toMatchObject({ headcount: 2, grandTotal: 1915 });
+    expect(value.totals).toMatchObject({ headcount: 2, grandTotal: 1916 });
     const files = value.files as { txtPath: string; xlsxPath: string };
     expect((await readFile(files.txtPath)).length).toBe(3 * 137);
     expect((await readFile(files.xlsxPath)).subarray(0, 2).toString('ascii')).toBe('PK');

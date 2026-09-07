@@ -5,7 +5,12 @@ import { fromSatang, round2, sumSatang, toSatang } from './util/num.js';
 const clamp = (value: number, low: number, high: number): number =>
   Math.min(Math.max(value, low), high);
 
-export const roundSatang = (baht: number): number => fromSatang(toSatang(baht));
+/**
+ * Round one person's contribution to a whole baht per the สปส. rule confirmed against a real
+ * accepted file (SSOSENT 6504): เศษ ≥ 50 สตางค์ ปัดขึ้นเป็น 1 บาท, ต่ำกว่า 50 สตางค์ ปัดทิ้ง.
+ * e.g. 380.65 → 381, 500.45 → 500, 82.50 → 83.
+ */
+export const roundContributionBaht = (baht: number): number => Math.floor((toSatang(baht) + 50) / 100);
 
 function assertEmployee(employee: Employee): void {
   if (!/^\d{13}$/.test(employee.ssoId)) throw new Error(`ssoId must be 13 digits: ${employee.ssoId}`);
@@ -25,7 +30,7 @@ export function computeRun(ctx: RunContext): RunResult {
     assertEmployee(employee);
     const baseWage = clamp(employee.wage, rule.wageFloor, rule.wageCeiling);
     const employeeShare = Math.min(
-      roundSatang((baseWage * rule.ratePercent) / 100),
+      roundContributionBaht((baseWage * rule.ratePercent) / 100),
       rule.maxContribution,
     );
     return { employee, baseWage, employeeShare, employerShare: employeeShare };

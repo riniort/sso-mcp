@@ -1,3 +1,4 @@
+import { roundContributionBaht } from './calc.js';
 import type { RunResult } from './types.js';
 import { fromSatang, round2, sumSatang } from './util/num.js';
 
@@ -24,7 +25,7 @@ export function validateTier1(run: RunResult): string[] {
     seen.add(employee.ssoId);
     const expectedBase = Math.min(Math.max(employee.wage, run.rule.wageFloor), run.rule.wageCeiling);
     const expectedShare = Math.min(
-      round2((expectedBase * run.rule.ratePercent) / 100),
+      roundContributionBaht((expectedBase * run.rule.ratePercent) / 100),
       run.rule.maxContribution,
     );
     if (line.baseWage !== expectedBase) errors.push(`base wage miscalc ssoId=${employee.ssoId}`);
