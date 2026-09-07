@@ -1,7 +1,9 @@
+// Official codes from the สปส. "Format เงินสมทบ (135)" spec: 003=นาย, 004=นางสาว, 005=นาง.
+// The spec lists only these three; any other prefix must be requested from ประกันสังคม.
 export const PREFIX_CODES = {
-  นาย: '001',
-  นาง: '002',
-  นางสาว: '003',
+  นาย: '003',
+  นางสาว: '004',
+  นาง: '005',
 } as const;
 
 export function lookupPrefixCode(prefix: string): string {

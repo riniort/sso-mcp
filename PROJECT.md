@@ -166,9 +166,24 @@ correct them without touching code. Defaults below are the P0 starting guess.
 | คำนำหน้า codes | seed table | `prefix-codes.ts` | สปส. spec |
 | e-Service login | plain user/password | `actuator.ts` | live check |
 
-### Confirmed against a real accepted file (งวด 04/2565, SSOSENT 6504.txt)
+### Confirmed against the OFFICIAL spec + a real accepted file
 
-Verified by decoding a genuine government-accepted upload file (kept out of the repo — real PII):
+The official สปส. layout — **"Format เงินสมทบ 135 (Text File)"** (an .xls on the SSO downloads
+page, "โปรแกรมต่างๆ") — was obtained and matches `field-spec.ts` **field-for-field**:
+
+- Header (135): recordType1 · accNo10 · branch6 · paidDate6(DDMMYY) · paidPeriod4(MMYY) ·
+  companyName45 · rate4 · totalEmployee6 · totalWages15 · totalPaid14 · paidByEmployee12 ·
+  paidByEmployer12.
+- Detail (135): recordType1 · ssoId13 · prefix3 · fname30 · lname35 · wages14 · paidAmount12 ·
+  blank27.
+- Money fields carry 2 implied decimals, right-aligned, zero-padded, no decimal point
+  (e.g. 15,000.00 → `00000001500000`) — i.e. satang ×100.
+- **Prefix codes (official): 003=นาย, 004=นางสาว, 005=นาง** (others: contact สปส.). Fixed
+  `prefix-codes.ts`, which previously had wrong seed values (นาย=001).
+- Detail WAGES field = **ค่าจ้างของผู้ประกันตน (actual wage)**; the generator writes the actual
+  wage (contribution is capped separately). Resolves the over-ceiling wage-field question.
+
+Also verified by decoding a genuine government-accepted upload file (kept out of the repo — real PII):
 
 - **135-byte fixed-width records, CRLF, TIS-620** — CONFIRMED.
 - **Text fields left-aligned, space-padded; numeric fields right-aligned, zero-padded** — CONFIRMED.
@@ -184,9 +199,17 @@ Verified by decoding a genuine government-accepted upload file (kept out of the 
   (wage 7,613.00 → 5% = 380.65 → stored **381.00**). This matches the สปส. rule (เศษตั้งแต่ 50
   สตางค์ปัดขึ้นเป็น 1 บาท, ต่ำกว่า 50 สตางค์ปัดทิ้ง). `calc.ts` now uses `roundContributionBaht`
   (was satang rounding). Resolves open question #4.
-- **Open — wage field over ceiling.** The sample has no earner above the 15,000 ceiling, so whether
-  the detail เงินค่าจ้าง field carries the *actual* wage or the *capped* base is still unconfirmed;
-  the generator currently writes the actual wage. Confirm with an over-ceiling sample.
+- **Wage field over ceiling — RESOLVED.** The official spec names the detail field
+  ค่าจ้างของผู้ประกันตน (actual wage); the generator writes the actual wage. Contribution is
+  computed on the capped base separately.
+
+### Official reference files (สปส. downloads → "โปรแกรมต่างๆ")
+
+- Format เงินสมทบ 135 (Text File) — the layout spec used above (.xls inside a .zip).
+- Format ตัวอย่างไฟล์ Excel — the Excel upload template.
+- SSO Media 2.0 program + Windows manual — the desktop tool that produces these files.
+- E-Services user manual: https://www.sso.go.th/eservices/web/UserManual.pdf
+See §21 for URLs. (Spec files are not committed; they are public downloads, not part of the build.)
 
 ---
 
@@ -588,16 +611,18 @@ Step 3  xlsx-summary: payroll + เงินสมทบ for month XX + diff vs 
 
 ## 17. Open questions (confirm before build)
 
-1. e-Service **employer** login — still plain user/password, or captcha/OTP now?
-   (v1 assumes user/password.)
-2. Real สปส.1-10 sample to lock the §7 config values (padding / decimal / year / encoding).
-3. คำนำหน้าชื่อ code list.
-4. Rounding rule for สตางค์.
-5. **Wage floor for 2569** — the กฎกระทรวง set ค่าจ้างขั้นต่ำ too; confirm the number
-   (§10 seeds 1,650 pending check).
-6. **Does e-Service show recomputed totals BEFORE the final submit?** The Tier-2
-   before-submit safety model depends on it (§13). If not, P2 must be redesigned.
-7. Does e-Service expose whether a period is **already submitted** (for the dup guard)?
+1. ~~e-Service **employer** login — plain user/password vs captcha/OTP?~~ **RESOLVED:** verified
+   live — plain user/password form (login.do), no captcha/OTP; session-cookie servlet.
+2. ~~Real สปส.1-10 sample to lock the §7 config values.~~ **RESOLVED:** official "Format 135" spec
+   + a real accepted file; `field-spec.ts` matches field-for-field.
+3. ~~คำนำหน้าชื่อ code list.~~ **RESOLVED:** 003=นาย, 004=นางสาว, 005=นาง (others via สปส.).
+4. ~~Rounding rule for สตางค์.~~ **RESOLVED:** whole baht, half-up (see §7).
+5. **Wage floor** — §10 uses 1,650; the search sources agree (<1,650 → 1,650). Confirm the
+   current-year กฎกระทรวง number if it changes.
+6. ~~Does e-Service show recomputed totals BEFORE final submit?~~ **RESOLVED:** yes — the ส่งเงินสมทบ
+   wizard has step 4 "สรุปข้อมูลเงินสมทบ" before the final send.
+7. ~~Does e-Service expose whether a period is already submitted?~~ **RESOLVED:** yes —
+   infoEmployeeContribute.do lists filed periods (implemented as the dup-check).
 
 **Resolved:** e-Service accepts `.txt` only; `.xlsx` is human-review (see §2).
 
@@ -944,7 +969,14 @@ export function prepare(ctx: RunContext, outPath: string) {
 ---
 
 ## 21. References
-- File layout: panyame.com — รูปแบบไฟล์ Text สปส.1-10
+- **Official file layout** — สปส. "Format เงินสมทบ 135 (Text File)" (.xls in .zip):
+  https://www.sso.go.th/wpr/assets/upload/files_storage/sso_th/949575a913c647db4f68facd08402585.zip
+  (from the SSO downloads page → "โปรแกรมต่างๆ")
+- Official Excel upload template:
+  https://www.sso.go.th/wpr/assets/upload/files_storage/sso_th/5dff0034a8f007a36ba05305e523b5a1.xlsx
+- SSO Media 2.0 program + manual (the desktop tool that generates these files) — same downloads page.
+- E-Services user manual: https://www.sso.go.th/eservices/web/UserManual.pdf
+- Rounding rule (whole baht, half-up): SSO contribution-calculation guidance (see git history / research notes).
 - Auth/credential base: riniort/flowaccount-mcp (`src/auth/*`)
 - Pattern: EASY-ACC prepare/run split
 - Contribution ceiling 2569–2571 (17,500 → 875): SSO stepwise adjustment, effective 1 Jan 2569
